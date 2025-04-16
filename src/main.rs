@@ -32,7 +32,6 @@ pub fn main() {
                     if let Some(event) = korg_nano_kontrol_2::Event::from_midi(msg) {
                         event_tx.send(event).unwrap();
                     }
-                    thread::sleep(Duration::from_millis(10));
                 },
                 (),
             )
@@ -119,7 +118,7 @@ pub fn main() {
                     }
                     _ => {}
                 },
-                Err(e) => break 'korg_event,
+                Err(_e) => break 'korg_event,
             }
         }
         {
