@@ -52,15 +52,14 @@ pub fn main() {
         let bpm = Arc::clone(&bpm);
         thread::spawn(move || {
             loop {
-                {
-                    let t0 = *t0.lock().unwrap();
-                    let bpm = *bpm.lock().unwrap();
-                    // println!("thread bpm {bpm}");
-                    let now = timer::ticks();
-                    let mut counter = counter.lock().unwrap();
-
-                    *counter = (now - t0) as f32 / 1000.0 / 60.0 * bpm;
-                }
+                let t0_value = *t0.lock().unwrap();
+                let bpm_value = *bpm.lock().unwrap();
+                let now = timer::ticks();
+                let new_counter_value = (now - t0_value) as f32 / 1000.0 / 60.0 * bpm_value;
+                
+                // Only lock counter once to update
+                *counter.lock().unwrap() = new_counter_value;
+                
                 thread::sleep(Duration::from_millis(10));
             }
         });
@@ -86,15 +85,15 @@ pub fn main() {
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
-        // let i: u8;
-        let counter_copy;
-        {
-            counter_copy = *counter.lock().unwrap();
-        }
+        let counter_copy = {
+            let counter_guard = counter.lock().unwrap();
+            *counter_guard  // Copy the value while lock is held
+        };
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
+        let current_bpm = *bpm.lock().unwrap();
         let surface = font
-            .render(&format!("BPM: {:.1}", *bpm.lock().unwrap()))
+            .render(&format!("BPM: {:.1}", current_bpm))
             .blended(Color::RGB(255, 255, 255))
             .unwrap();
         let texture_creator = canvas.texture_creator();
@@ -117,8 +116,29 @@ pub fn main() {
                     keycode: Some(Keycode::Space),
                     ..
                 } => {
-                    *counter.lock().unwrap() = 0.0;
-                    *t0.lock().unwrap() = timer::ticks();
+                    let now = timer::ticks();
+                    {
+                        let mut counter = counter.lock().unwrap();
+                        let mut t0 = t0.lock().unwrap();
+                        *counter = 0.0;
+                        *t0 = now;
+                    }
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Up),
+                    ..
+                } => {
+                    let mut bpm = bpm.lock().unwrap();
+                    *bpm = (*bpm + 1.0).min(200.0);  // Increase BPM, max 200
+                    println!("BPM: {}", *bpm);
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Down),
+                    ..
+                } => {
+                    let mut bpm = bpm.lock().unwrap();
+                    *bpm = (*bpm - 1.0).max(30.0);  // Decrease BPM, min 30
+                    println!("BPM: {}", *bpm);
                 }
                 _ => {}
             }
@@ -142,9 +162,11 @@ pub fn main() {
         }
         {
             let mut bpm = bpm.lock().unwrap();
-            if new_bpm > 100.0 && *bpm != new_bpm {
-                println!("---{}", *bpm);
-                *bpm = new_bpm;
+            if new_bpm > 100.0 {
+                if *bpm != new_bpm {
+                    *bpm = new_bpm;
+                    println!("New BPM: {}", new_bpm);  // Print new value after update
+                }
             }
         }
         // The rest of the game loop goes here...
@@ -159,9 +181,6 @@ pub fn main() {
 
 fn draw_beat(counter: f32, canvas: &mut Canvas<Window>) {
     let i = (counter.floor() as u64) % 4;
-    // unsafe {
-    //     SDL_RenderDebugText(SDL_GetRenderer(window),50.0, 50.0, );
-    // }
     canvas.set_draw_color(Color::RGB(255, 0, 255));
     let rect = sdl3::render::FRect::new(
         200_f32 * (i as f32),
