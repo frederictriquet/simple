@@ -3,9 +3,13 @@ extern crate sdl3;
 use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::Color;
-use sdl3::render::Canvas;
+use sdl3::render::{Canvas, TextureQuery};
 use sdl3::timer;
 use sdl3::video::Window;
+
+use sdl3::rect::Rect;
+
+
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -29,7 +33,7 @@ pub fn main() {
                 i,
                 "nanoKONTROL2 SLIDER/KNOB",
                 move |_stamp, msg, _| {
-                    if let Some(event) = korg_nano_kontrol_2::Event::from_midi(msg) {
+                   if let Some(event) = korg_nano_kontrol_2::Event::from_midi(msg) {
                         event_tx.send(event).unwrap();
                     }
                 },
@@ -63,7 +67,10 @@ pub fn main() {
     }
 
     let sdl_context = sdl3::init().unwrap();
+    let ttf_context = sdl3::ttf::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+
+    let font = ttf_context.load_font("/System/Library/Fonts/Helvetica.ttc", 32.0).unwrap();
 
     let window = video_subsystem
         .window("rust-sdl3 demo", 800, 600)
@@ -86,6 +93,18 @@ pub fn main() {
         }
         canvas.set_draw_color(Color::RGB(0, 0, 0));
         canvas.clear();
+        let surface = font
+            .render(&format!("BPM: {:.1}", *bpm.lock().unwrap()))
+            .blended(Color::RGB(255, 255, 255))
+            .unwrap();
+        let texture_creator = canvas.texture_creator();
+        let texture = texture_creator
+            .create_texture_from_surface(&surface)
+            .unwrap();
+        let TextureQuery { width, height, .. } = texture.query();
+        let target = Rect::new(10, 10, width, height);
+        canvas.copy(&texture, None, target).unwrap();
+
         draw_beat(counter_copy, &mut canvas);
         for event in event_pump.poll_iter() {
             match event {
