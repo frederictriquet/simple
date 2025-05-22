@@ -16,40 +16,26 @@ use std::time::Duration;
 extern crate korg_nano_kontrol_2;
 extern crate midir;
 
-pub fn main() {
-    let midi_in = midir::MidiInput::new("Korg Nano Kontrol 2").unwrap();
-    // A channel for sending events to the main thread.
-    let (event_tx, event_rx) = std::sync::mpsc::channel();
+struct Metronome {
+    counter: Arc<Mutex<f32>>,
+    t0: Arc<Mutex<u64>>,
+    bpm: Arc<Mutex<f32>>,
+}
 
-    let mut inputs = Vec::new();
-
-    // For each point used by the nano kontrol 2, check for events.
-    for i in 0..midi_in.port_count() {
-        let name = midi_in.port_name(i).unwrap();
-        let event_tx = event_tx.clone();
-        let midi_in = midir::MidiInput::new(&name).unwrap();
-        let input = midi_in
-            .connect(
-                i,
-                "nanoKONTROL2 SLIDER/KNOB",
-                move |_stamp, msg, _| {
-                   if let Some(event) = korg_nano_kontrol_2::Event::from_midi(msg) {
-                        event_tx.send(event).unwrap();
-                    }
-                },
-                (),
-            )
-            .unwrap();
-        inputs.push(input);
+impl Metronome {
+    fn new() -> Self {
+        Metronome {
+            counter: Arc::new(Mutex::new(0.0)),
+            t0: Arc::new(Mutex::new(timer::ticks())),
+            bpm: Arc::new(Mutex::new(120.0)),
+        }
     }
 
-    let counter: Arc<Mutex<f32>> = Arc::new(Mutex::new(0.0));
-    let t0: Arc<Mutex<u64>> = Arc::new(Mutex::new(timer::ticks()));
-    let bpm = Arc::new(Mutex::new(120.0));
-    {
-        let counter = Arc::clone(&counter);
-        let t0 = Arc::clone(&t0);
-        let bpm = Arc::clone(&bpm);
+    fn start_counter_thread(&self) {
+        let counter = Arc::clone(&self.counter);
+        let t0 = Arc::clone(&self.t0);
+        let bpm = Arc::clone(&self.bpm);
+        
         thread::spawn(move || {
             loop {
                 let t0_value = *t0.lock().unwrap();
@@ -57,13 +43,47 @@ pub fn main() {
                 let now = timer::ticks();
                 let new_counter_value = (now - t0_value) as f32 / 1000.0 / 60.0 * bpm_value;
                 
-                // Only lock counter once to update
                 *counter.lock().unwrap() = new_counter_value;
                 
                 thread::sleep(Duration::from_millis(10));
             }
         });
     }
+
+    fn reset(&self) {
+        let now = timer::ticks();
+        let mut counter = self.counter.lock().unwrap();
+        let mut t0 = self.t0.lock().unwrap();
+        *counter = 0.0;
+        *t0 = now;
+    }
+
+    fn adjust_bpm(&self, delta: f32) {
+        let mut bpm = self.bpm.lock().unwrap();
+        *bpm = (*bpm + delta).clamp(30.0, 200.0);
+    }
+
+    fn set_bpm(&self, new_bpm: f32) {
+        if new_bpm > 100.0 {
+            let mut bpm = self.bpm.lock().unwrap();
+            *bpm = new_bpm;
+        }
+    }
+
+    fn get_counter(&self) -> f32 {
+        *self.counter.lock().unwrap()
+    }
+
+    fn get_bpm(&self) -> f32 {
+        *self.bpm.lock().unwrap()
+    }
+}
+
+pub fn main() {
+    let (inputs, event_rx) = setup_midi();
+
+    let metronome = Metronome::new();
+    metronome.start_counter_thread();
 
     let sdl_context = sdl3::init().unwrap();
     let ttf_context = sdl3::ttf::init().unwrap();
@@ -85,26 +105,6 @@ pub fn main() {
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
-        let counter_copy = {
-            let counter_guard = counter.lock().unwrap();
-            *counter_guard  // Copy the value while lock is held
-        };
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.clear();
-        let current_bpm = *bpm.lock().unwrap();
-        let surface = font
-            .render(&format!("BPM: {:.1}", current_bpm))
-            .blended(Color::RGB(255, 255, 255))
-            .unwrap();
-        let texture_creator = canvas.texture_creator();
-        let texture = texture_creator
-            .create_texture_from_surface(&surface)
-            .unwrap();
-        let TextureQuery { width, height, .. } = texture.query();
-        let target = Rect::new(10, 10, width, height);
-        canvas.copy(&texture, None, target).unwrap();
-
-        draw_beat(counter_copy, &mut canvas);
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -116,35 +116,24 @@ pub fn main() {
                     keycode: Some(Keycode::Space),
                     ..
                 } => {
-                    let now = timer::ticks();
-                    {
-                        let mut counter = counter.lock().unwrap();
-                        let mut t0 = t0.lock().unwrap();
-                        *counter = 0.0;
-                        *t0 = now;
-                    }
+                    metronome.reset();
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Up),
                     ..
                 } => {
-                    let mut bpm = bpm.lock().unwrap();
-                    *bpm = (*bpm + 1.0).min(200.0);  // Increase BPM, max 200
-                    println!("BPM: {}", *bpm);
+                    metronome.adjust_bpm(0.1);
                 }
                 Event::KeyDown {
                     keycode: Some(Keycode::Down),
                     ..
                 } => {
-                    let mut bpm = bpm.lock().unwrap();
-                    *bpm = (*bpm - 1.0).max(30.0);  // Decrease BPM, min 30
-                    println!("BPM: {}", *bpm);
+                    metronome.adjust_bpm(-0.1);
                 }
                 _ => {}
             }
         }
-
-        // for event in &event_rx.try_recv() {
+        
         let mut new_bpm: f32 = 0.0;
         'korg_event: loop {
             match event_rx.try_recv() {
@@ -160,23 +149,47 @@ pub fn main() {
                 Err(_e) => break 'korg_event,
             }
         }
-        {
-            let mut bpm = bpm.lock().unwrap();
-            if new_bpm > 100.0 {
-                if *bpm != new_bpm {
-                    *bpm = new_bpm;
-                    println!("New BPM: {}", new_bpm);  // Print new value after update
-                }
-            }
-        }
-        // The rest of the game loop goes here...
+        metronome.set_bpm(new_bpm);
 
+        let counter_copy = metronome.get_counter();
+        let current_bpm = metronome.get_bpm();
+        
+        render_frame(&mut canvas, &font, counter_copy, current_bpm);
+        
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
     for input in inputs {
         input.close();
     }
+}
+
+fn setup_midi() -> (Vec<midir::MidiInputConnection<()>>, std::sync::mpsc::Receiver<korg_nano_kontrol_2::Event>) {
+    let midi_in = midir::MidiInput::new("Korg Nano Kontrol 2").unwrap();
+    let (event_tx, event_rx) = std::sync::mpsc::channel();
+    let mut inputs = Vec::new();
+
+    // For each point used by the nano kontrol 2, check for events.
+    for i in 0..midi_in.port_count() {
+        let name = midi_in.port_name(i).unwrap();
+        let event_tx = event_tx.clone();
+        let midi_in = midir::MidiInput::new(&name).unwrap();
+        let input = midi_in
+            .connect(
+                i,
+                "nanoKONTROL2 SLIDER/KNOB",
+                move |_stamp, msg, _| {
+                    if let Some(event) = korg_nano_kontrol_2::Event::from_midi(msg) {
+                        event_tx.send(event).unwrap();
+                    }
+                },
+                (),
+            )
+            .unwrap();
+        inputs.push(input);
+    }
+    
+    (inputs, event_rx)
 }
 
 fn draw_beat(counter: f32, canvas: &mut Canvas<Window>) {
@@ -189,4 +202,23 @@ fn draw_beat(counter: f32, canvas: &mut Canvas<Window>) {
         -600_f32 * (1.0 - counter.fract()),
     );
     canvas.fill_rect(rect).unwrap();
+}
+
+fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, counter: f32, bpm: f32) {
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    
+    let surface = font
+        .render(&format!("BPM: {:.1}", bpm))
+        .blended(Color::RGB(255, 255, 255))
+        .unwrap();
+    let texture_creator = canvas.texture_creator();
+    let texture = texture_creator
+        .create_texture_from_surface(&surface)
+        .unwrap();
+    let TextureQuery { width, height, .. } = texture.query();
+    let target = Rect::new(10, 10, width, height);
+    canvas.copy(&texture, None, target).unwrap();
+
+    draw_beat(counter, canvas);
 }
