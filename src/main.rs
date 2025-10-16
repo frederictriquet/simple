@@ -9,12 +9,15 @@ use sdl3::video::Window;
 
 use sdl3::rect::Rect;
 
-
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 extern crate korg_nano_kontrol_2;
 extern crate midir;
+
+// Import visual effects module
+mod visual_effects;
+use visual_effects::{BeatBarsEffect, PulsingCircle, WaveEffect, SpiralEffect, VisualEffectComposite};
 
 struct Metronome {
     counter: Arc<Mutex<f32>>,
@@ -85,6 +88,41 @@ pub fn main() {
     let metronome = Metronome::new();
     metronome.start_counter_thread();
 
+    // Create composite visual effect with multiple effects
+    let mut visual_effects = VisualEffectComposite::new();
+
+    // Add beat bars effect (the original draw_beat visualization)
+    visual_effects.add_effect(Box::new(BeatBarsEffect::new(
+        4,        // 4 bars for 4 beats
+        200.0,    // 200px width per bar
+        600.0,    // canvas height
+        Color::RGB(255, 0, 255)  // magenta
+    )));
+
+    // Add pulsing circle effect
+    visual_effects.add_effect(Box::new(PulsingCircle::new(
+        400.0,
+        300.0,
+        50.0,
+        100.0,
+        Color::RGB(0, 255, 255)
+    )));
+
+    // Add wave effect
+    visual_effects.add_effect(Box::new(WaveEffect::new(
+        50.0,
+        0.5,
+        100.0,
+        Color::RGB(255, 255, 0)
+    )));
+
+    // Add spiral effect
+    visual_effects.add_effect(Box::new(SpiralEffect::new(
+        400.0,
+        300.0,
+        Color::RGB(0, 255, 128)
+    )));
+
     let sdl_context = sdl3::init().unwrap();
     let ttf_context = sdl3::ttf::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -153,9 +191,9 @@ pub fn main() {
 
         let counter_copy = metronome.get_counter();
         let current_bpm = metronome.get_bpm();
-        
-        render_frame(&mut canvas, &font, counter_copy, current_bpm);
-        
+
+        render_frame(&mut canvas, &font, &visual_effects, counter_copy, current_bpm);
+
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
     }
@@ -192,22 +230,10 @@ fn setup_midi() -> (Vec<midir::MidiInputConnection<()>>, std::sync::mpsc::Receiv
     (inputs, event_rx)
 }
 
-fn draw_beat(counter: f32, canvas: &mut Canvas<Window>) {
-    let i = (counter.floor() as u64) % 4;
-    canvas.set_draw_color(Color::RGB(255, 0, 255));
-    let rect = sdl3::render::FRect::new(
-        200_f32 * (i as f32),
-        599_f32,
-        200_f32,
-        -600_f32 * (1.0 - counter.fract()),
-    );
-    canvas.fill_rect(rect).unwrap();
-}
-
-fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, counter: f32, bpm: f32) {
+fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, visual_effects: &VisualEffectComposite, counter: f32, bpm: f32) {
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
-    
+
     let surface = font
         .render(&format!("BPM: {:.1}", bpm))
         .blended(Color::RGB(255, 255, 255))
@@ -220,5 +246,5 @@ fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, counter: f3
     let target = Rect::new(10, 10, width, height);
     canvas.copy(&texture, None, target).unwrap();
 
-    draw_beat(counter, canvas);
+    visual_effects.draw_all(canvas, counter);
 }
