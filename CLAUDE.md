@@ -6,6 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Rust-based metronome application with a visual SDL3 interface and MIDI control support via Korg Nano Kontrol 2. The application uses SDL3 for graphics and event handling, SDL3-TTF for text rendering, and midir for MIDI input processing.
 
+## Setup
+
+### First-Time Setup
+The project uses a local path dependency for `korg_nano_kontrol_2` to ensure compatibility across macOS and Linux:
+
+```bash
+./setup_deps.sh  # Clones the dependency if not present
+```
+
+**Note on dependencies:**
+- **Linux**: Must use path dependency due to libgit2 compatibility issues with cargo git fetching
+- **macOS**: Can use either git or path dependency (uncomment the git line in Cargo.toml if preferred)
+
 ## Common Commands
 
 ### Build and Run

@@ -1,0 +1,5 @@
+# Cargo configuration
+# git-fetch-with-cli: Use system git instead of libgit2 for fetching
+# (Helps with some Linux libgit2 compatibility issues, though may not fully resolve them)
+[net]
+git-fetch-with-cli = true
