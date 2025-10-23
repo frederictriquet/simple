@@ -21,29 +21,44 @@ This is a Rust-based metronome application with a visual SDL3 interface and MIDI
 
 ### Core Components
 
-1. **Metronome Struct** ([src/main.rs:19-80](src/main.rs#L19-L80))
+1. **Metronome Struct** (src/main.rs:22-83)
    - Thread-safe counter using `Arc<Mutex<>>` for shared state
    - Runs a background thread that continuously updates the counter based on elapsed time and BPM
    - Supports BPM adjustment (clamped between 30-200 BPM) and reset functionality
    - Counter represents the current beat position (fractional value)
 
-2. **MIDI Integration** ([src/main.rs:167-193](src/main.rs#L167-L193))
+2. **Visual Effects System** (src/visual_effects/)
+   - Uses trait-based architecture with `GenericVisualEffect` trait for pluggable effects
+   - `VisualEffectComposite` manages multiple effects that render simultaneously
+   - Each effect implements `draw()` method that takes canvas and counter value
+   - Current effects: Beat Bars, Pulsing Circle, Wave, and Spiral
+   - Effects are composed in main.rs (lines 92-124) before the main loop
+
+3. **MIDI Integration** (src/main.rs:205-231)
    - `setup_midi()` initializes MIDI connections and returns a channel receiver for events
    - Connects to all available MIDI ports to listen for Korg Nano Kontrol 2 events
    - Uses a multi-producer, single-consumer channel to communicate MIDI events to the main loop
    - Vertical Slider A on the controller maps to BPM (110-135 BPM range based on slider position)
 
-3. **Main Event Loop** ([src/main.rs:107-161](src/main.rs#L107-L161))
+4. **Main Event Loop** (src/main.rs:145-199)
    - Processes SDL keyboard events (Space to reset, Up/Down arrows to adjust BPM, Escape to quit)
    - Polls MIDI events via the channel without blocking
    - Renders at 60 FPS
    - Updates metronome BPM from MIDI slider input
 
-4. **Rendering** ([src/main.rs:195-224](src/main.rs#L195-L224))
-   - `draw_beat()`: Visualizes the current beat with a rising magenta bar (4 bars for 4 beats)
-   - `render_frame()`: Clears screen, renders BPM text, and draws beat visualization
+5. **Rendering** (src/main.rs:233-250)
+   - `render_frame()`: Clears screen, renders BPM text, and delegates to visual effects
    - Uses SDL3 TTF to render text with system Helvetica font
-   - Beat visualization uses fractional counter value to create smooth animations
+   - All visual effects render through `visual_effects.draw_all()` which iterates over registered effects
+
+### Visual Effects Architecture
+
+The visual effects system uses a trait-based plugin architecture:
+- `GenericVisualEffect` trait defines the interface for all effects
+- Each effect is a separate module in `src/visual_effects/`
+- Effects receive the metronome counter value and render based on beat position
+- `VisualEffectComposite` acts as a container that renders multiple effects in sequence
+- New effects can be added by implementing the `GenericVisualEffect` trait
 
 ### Concurrency Model
 

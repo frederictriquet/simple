@@ -127,7 +127,10 @@ pub fn main() {
     let ttf_context = sdl3::ttf::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
-    let font = ttf_context.load_font("/System/Library/Fonts/Helvetica.ttc", 32.0).unwrap();
+    // Try macOS font path first, then fall back to Linux
+    let font = ttf_context.load_font("/System/Library/Fonts/Helvetica.ttc", 32.0)
+        .or_else(|_| ttf_context.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32.0))
+        .unwrap();
 
     let window = video_subsystem
         .window("rust-sdl3 demo", 800, 600)
