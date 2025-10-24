@@ -75,6 +75,12 @@ The visual effects system uses a trait-based plugin architecture:
 - `VisualEffectComposite` acts as a container that renders multiple effects in sequence
 - New effects can be added by implementing the `GenericVisualEffect` trait
 
+**Available Effects:**
+- **BeatBarsEffect**: Rising bars synchronized to each beat
+- **PulsingCircle**: Expanding circle that pulses with the rhythm
+- **WaveEffect**: Animated wave pattern
+- **SpiralEffect**: Rotating spiral visualization
+
 ### Concurrency Model
 
 The metronome uses a separate thread for time tracking to ensure accurate timing independent of frame rate. The main thread handles:

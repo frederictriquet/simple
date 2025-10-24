@@ -79,7 +79,6 @@ pub fn main() {
     let mut canvas = window.into_canvas();
 
     canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
     canvas.present();
     let mut event_pump = sdl_context.event_pump().unwrap();
     'running: loop {
@@ -174,6 +173,7 @@ fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, visual_effe
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
 
+    // Render BPM text
     let surface = font
         .render(&format!("BPM: {:.1}", bpm))
         .blended(Color::RGB(255, 255, 255))
@@ -186,5 +186,6 @@ fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, visual_effe
     let target = Rect::new(10, 10, width, height);
     canvas.copy(&texture, None, target).unwrap();
 
+    // Render all visual effects
     visual_effects.draw_all(canvas, counter);
 }

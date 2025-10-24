@@ -19,6 +19,7 @@ impl VisualEffectComposite {
     }
 
     pub fn draw_all(&self, canvas: &mut Canvas<Window>, counter: f32) {
+        // Draw all effects sequentially
         for effect in &self.effects {
             effect.draw(canvas, counter);
         }
