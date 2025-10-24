@@ -34,34 +34,36 @@ The project uses a local path dependency for `korg_nano_kontrol_2` to ensure com
 
 ### Core Components
 
-1. **Metronome Struct** (src/main.rs:22-83)
+1. **Metronome Module** (src/metronome.rs)
    - Thread-safe counter using `Arc<Mutex<>>` for shared state
    - Runs a background thread that continuously updates the counter based on elapsed time and BPM
    - Supports BPM adjustment (clamped between 30-200 BPM) and reset functionality
    - Counter represents the current beat position (fractional value)
+   - Public API: `new()`, `start_counter_thread()`, `reset()`, `adjust_bpm()`, `set_bpm()`, `get_counter()`, `get_bpm()`
 
 2. **Visual Effects System** (src/visual_effects/)
    - Uses trait-based architecture with `GenericVisualEffect` trait for pluggable effects
    - `VisualEffectComposite` manages multiple effects that render simultaneously
    - Each effect implements `draw()` method that takes canvas and counter value
    - Current effects: Beat Bars, Pulsing Circle, Wave, and Spiral
-   - Effects are composed in main.rs (lines 92-124) before the main loop
+   - Effects are composed in main.rs before the main loop
 
-3. **MIDI Integration** (src/main.rs:205-231)
-   - `setup_midi()` initializes MIDI connections and returns a channel receiver for events
+3. **MIDI Integration** (src/main.rs)
+   - `setup_midi()`: Initializes MIDI connections and returns a channel receiver for events
    - Connects to all available MIDI ports to listen for Korg Nano Kontrol 2 events
    - Uses a multi-producer, single-consumer channel to communicate MIDI events to the main loop
    - Vertical Slider A on the controller maps to BPM (110-135 BPM range based on slider position)
 
-4. **Main Event Loop** (src/main.rs:145-199)
+4. **Main Event Loop** (src/main.rs)
    - Processes SDL keyboard events (Space to reset, Up/Down arrows to adjust BPM, Escape to quit)
    - Polls MIDI events via the channel without blocking
    - Renders at 60 FPS
    - Updates metronome BPM from MIDI slider input
 
-5. **Rendering** (src/main.rs:233-250)
+5. **Rendering** (src/main.rs)
    - `render_frame()`: Clears screen, renders BPM text, and delegates to visual effects
-   - Uses SDL3 TTF to render text with system Helvetica font
+   - Cross-platform font loading (tries macOS path first, falls back to Linux)
+   - Uses SDL3 TTF to render text
    - All visual effects render through `visual_effects.draw_all()` which iterates over registered effects
 
 ### Visual Effects Architecture

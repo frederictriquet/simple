@@ -4,83 +4,20 @@ use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
 use sdl3::pixels::Color;
 use sdl3::render::{Canvas, TextureQuery};
-use sdl3::timer;
 use sdl3::video::Window;
 
 use sdl3::rect::Rect;
 
-use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
 extern crate korg_nano_kontrol_2;
 extern crate midir;
 
-// Import visual effects module
+// Import modules
+mod metronome;
 mod visual_effects;
+
+use metronome::Metronome;
 use visual_effects::{BeatBarsEffect, PulsingCircle, WaveEffect, SpiralEffect, VisualEffectComposite};
-
-struct Metronome {
-    counter: Arc<Mutex<f32>>,
-    t0: Arc<Mutex<u64>>,
-    bpm: Arc<Mutex<f32>>,
-}
-
-impl Metronome {
-    fn new() -> Self {
-        Metronome {
-            counter: Arc::new(Mutex::new(0.0)),
-            t0: Arc::new(Mutex::new(timer::ticks())),
-            bpm: Arc::new(Mutex::new(120.0)),
-        }
-    }
-
-    fn start_counter_thread(&self) {
-        let counter = Arc::clone(&self.counter);
-        let t0 = Arc::clone(&self.t0);
-        let bpm = Arc::clone(&self.bpm);
-        
-        thread::spawn(move || {
-            loop {
-                let t0_value = *t0.lock().unwrap();
-                let bpm_value = *bpm.lock().unwrap();
-                let now = timer::ticks();
-                let new_counter_value = (now - t0_value) as f32 / 1000.0 / 60.0 * bpm_value;
-                
-                *counter.lock().unwrap() = new_counter_value;
-                
-                thread::sleep(Duration::from_millis(10));
-            }
-        });
-    }
-
-    fn reset(&self) {
-        let now = timer::ticks();
-        let mut counter = self.counter.lock().unwrap();
-        let mut t0 = self.t0.lock().unwrap();
-        *counter = 0.0;
-        *t0 = now;
-    }
-
-    fn adjust_bpm(&self, delta: f32) {
-        let mut bpm = self.bpm.lock().unwrap();
-        *bpm = (*bpm + delta).clamp(30.0, 200.0);
-    }
-
-    fn set_bpm(&self, new_bpm: f32) {
-        if new_bpm > 100.0 {
-            let mut bpm = self.bpm.lock().unwrap();
-            *bpm = new_bpm;
-        }
-    }
-
-    fn get_counter(&self) -> f32 {
-        *self.counter.lock().unwrap()
-    }
-
-    fn get_bpm(&self) -> f32 {
-        *self.bpm.lock().unwrap()
-    }
-}
 
 pub fn main() {
     let (inputs, event_rx) = setup_midi();
