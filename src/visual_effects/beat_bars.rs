@@ -1,6 +1,4 @@
-use sdl3::pixels::Color;
-use sdl3::render::Canvas;
-use sdl3::video::Window;
+use macroquad::prelude::*;
 use super::GenericVisualEffect;
 
 // Beat bars effect - rising bars for each beat
@@ -23,16 +21,13 @@ impl BeatBarsEffect {
 }
 
 impl GenericVisualEffect for BeatBarsEffect {
-    fn draw(&self, canvas: &mut Canvas<Window>, counter: f32) {
+    fn draw(&self, counter: f32) {
         let i = (counter.floor() as u64) % self.num_bars as u64;
-        canvas.set_draw_color(self.color);
-        let rect = sdl3::render::FRect::new(
-            self.bar_width * (i as f32),
-            self.canvas_height - 1.0,
-            self.bar_width,
-            -self.canvas_height * (1.0 - counter.fract()),
-        );
-        canvas.fill_rect(rect).unwrap();
+        let x = self.bar_width * (i as f32);
+        let height = self.canvas_height * counter.fract();
+        let y = self.canvas_height - height;
+
+        draw_rectangle(x, y, self.bar_width, height, self.color);
     }
 
     fn name(&self) -> &str {

@@ -1,5 +1,3 @@
-use sdl3::render::Canvas;
-use sdl3::video::Window;
 use super::GenericVisualEffect;
 
 // Container for multiple effects
@@ -18,10 +16,10 @@ impl VisualEffectComposite {
         self.effects.push(effect);
     }
 
-    pub fn draw_all(&self, canvas: &mut Canvas<Window>, counter: f32) {
+    pub fn draw_all(&self, counter: f32) {
         // Draw all effects sequentially
         for effect in &self.effects {
-            effect.draw(canvas, counter);
+            effect.draw(counter);
         }
     }
 }

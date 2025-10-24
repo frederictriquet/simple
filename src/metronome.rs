@@ -1,19 +1,19 @@
-use sdl3::timer;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct Metronome {
     counter: Arc<Mutex<f32>>,
-    t0: Arc<Mutex<u64>>,
+    t0: Arc<Mutex<u128>>,
     bpm: Arc<Mutex<f32>>,
 }
 
 impl Metronome {
     pub fn new() -> Self {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
         Metronome {
             counter: Arc::new(Mutex::new(0.0)),
-            t0: Arc::new(Mutex::new(timer::ticks())),
+            t0: Arc::new(Mutex::new(now)),
             bpm: Arc::new(Mutex::new(120.0)),
         }
     }
@@ -27,7 +27,7 @@ impl Metronome {
             loop {
                 let t0_value = *t0.lock().unwrap();
                 let bpm_value = *bpm.lock().unwrap();
-                let now = timer::ticks();
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
                 let new_counter_value = (now - t0_value) as f32 / 1000.0 / 60.0 * bpm_value;
 
                 *counter.lock().unwrap() = new_counter_value;
@@ -38,7 +38,7 @@ impl Metronome {
     }
 
     pub fn reset(&self) {
-        let now = timer::ticks();
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis();
         let mut counter = self.counter.lock().unwrap();
         let mut t0 = self.t0.lock().unwrap();
         *counter = 0.0;

@@ -1,6 +1,4 @@
-use sdl3::pixels::Color;
-use sdl3::render::Canvas;
-use sdl3::video::Window;
+use macroquad::prelude::*;
 use super::GenericVisualEffect;
 
 // Wave effect
@@ -23,15 +21,21 @@ impl WaveEffect {
 }
 
 impl GenericVisualEffect for WaveEffect {
-    fn draw(&self, canvas: &mut Canvas<Window>, counter: f32) {
-        canvas.set_draw_color(self.color);
+    fn draw(&self, counter: f32) {
         let phase = counter * self.frequency;
 
-        // Draw a sine wave
-        for x in 0..800 {
-            let x_normalized = x as f32 / 100.0;
-            let y = self.y_offset + self.amplitude * ((x_normalized + phase).sin());
-            canvas.draw_point((x, y as i32)).unwrap();
+        // Draw a sine wave using line segments
+        let num_points = 800;
+        for i in 0..num_points - 1 {
+            let x1 = i as f32;
+            let x_normalized1 = x1 / 100.0;
+            let y1 = self.y_offset + self.amplitude * ((x_normalized1 + phase).sin());
+
+            let x2 = (i + 1) as f32;
+            let x_normalized2 = x2 / 100.0;
+            let y2 = self.y_offset + self.amplitude * ((x_normalized2 + phase).sin());
+
+            draw_line(x1, y1, x2, y2, 2.0, self.color);
         }
     }
 

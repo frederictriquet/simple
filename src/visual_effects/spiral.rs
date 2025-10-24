@@ -1,6 +1,4 @@
-use sdl3::pixels::Color;
-use sdl3::render::Canvas;
-use sdl3::video::Window;
+use macroquad::prelude::*;
 use super::GenericVisualEffect;
 
 // Spiral effect
@@ -21,18 +19,24 @@ impl SpiralEffect {
 }
 
 impl GenericVisualEffect for SpiralEffect {
-    fn draw(&self, canvas: &mut Canvas<Window>, counter: f32) {
-        canvas.set_draw_color(self.color);
+    fn draw(&self, counter: f32) {
         let rotation = counter * 2.0;
 
         // Draw a spiral that rotates with the beat
-        for i in 0..500 {
-            let t = i as f32 / 50.0;
-            let radius = t * 20.0;
-            let angle = t + rotation;
-            let x = self.center_x + radius * angle.cos();
-            let y = self.center_y + radius * angle.sin();
-            canvas.draw_point((x as i32, y as i32)).unwrap();
+        for i in 0..499 {
+            let t1 = i as f32 / 50.0;
+            let radius1 = t1 * 20.0;
+            let angle1 = t1 + rotation;
+            let x1 = self.center_x + radius1 * angle1.cos();
+            let y1 = self.center_y + radius1 * angle1.sin();
+
+            let t2 = (i + 1) as f32 / 50.0;
+            let radius2 = t2 * 20.0;
+            let angle2 = t2 + rotation;
+            let x2 = self.center_x + radius2 * angle2.cos();
+            let y2 = self.center_y + radius2 * angle2.sin();
+
+            draw_line(x1, y1, x2, y2, 2.0, self.color);
         }
     }
 

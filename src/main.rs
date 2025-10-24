@@ -1,14 +1,4 @@
-extern crate sdl3;
-
-use sdl3::event::Event;
-use sdl3::keyboard::Keycode;
-use sdl3::pixels::Color;
-use sdl3::render::{Canvas, TextureQuery};
-use sdl3::video::Window;
-
-use sdl3::rect::Rect;
-
-use std::time::Duration;
+use macroquad::prelude::*;
 extern crate korg_nano_kontrol_2;
 extern crate midir;
 
@@ -17,9 +7,19 @@ mod metronome;
 mod visual_effects;
 
 use metronome::Metronome;
-use visual_effects::{BeatBarsEffect, PulsingCircle, WaveEffect, SpiralEffect, VisualEffectComposite};
+use visual_effects::{BeatBarsEffect, PulsingCircle, WaveEffect, SpiralEffect, VisualEffectComposite, ZoomFeedback};
 
-pub fn main() {
+fn window_conf() -> Conf {
+    Conf {
+        window_title: "Rust Metronome".to_owned(),
+        window_width: 800,
+        window_height: 600,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window_conf)]
+async fn main() {
     let (inputs, event_rx) = setup_midi();
 
     let metronome = Metronome::new();
@@ -33,7 +33,7 @@ pub fn main() {
         4,        // 4 bars for 4 beats
         200.0,    // 200px width per bar
         600.0,    // canvas height
-        Color::RGB(255, 0, 255)  // magenta
+        Color::from_rgba(255, 0, 255, 255)  // magenta
     )));
 
     // Add pulsing circle effect
@@ -42,7 +42,7 @@ pub fn main() {
         300.0,
         50.0,
         100.0,
-        Color::RGB(0, 255, 255)
+        Color::from_rgba(0, 255, 255, 255)
     )));
 
     // Add wave effect
@@ -50,69 +50,42 @@ pub fn main() {
         50.0,
         0.5,
         100.0,
-        Color::RGB(255, 255, 0)
+        Color::from_rgba(255, 255, 0, 255)
     )));
 
     // Add spiral effect
     visual_effects.add_effect(Box::new(SpiralEffect::new(
         400.0,
         300.0,
-        Color::RGB(0, 255, 128)
+        Color::from_rgba(0, 255, 128, 255)
     )));
 
-    let sdl_context = sdl3::init().unwrap();
-    let ttf_context = sdl3::ttf::init().unwrap();
-    let video_subsystem = sdl_context.video().unwrap();
+    // Create zoom feedback effect
+    // opacity: 0.92 = 92% persistence (creates trails and fade)
+    // zoom_factor: 0.015 = 1.5% zoom per frame (creates visible zoom tunnel)
+    let mut zoom_feedback = ZoomFeedback::new(0.99999, 0.1);
 
-    // Try macOS font path first, then fall back to Linux
-    let font = ttf_context.load_font("/System/Library/Fonts/Helvetica.ttc", 32.0)
-        .or_else(|_| ttf_context.load_font("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 32.0))
-        .unwrap();
-
-    let window = video_subsystem
-        .window("rust-sdl3 demo", 800, 600)
-        .position_centered()
-        // .fullscreen()
-        .build()
-        .unwrap();
-
-    let mut canvas = window.into_canvas();
-
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.present();
-    let mut event_pump = sdl_context.event_pump().unwrap();
-    'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
-                Event::KeyDown {
-                    keycode: Some(Keycode::Space),
-                    ..
-                } => {
-                    metronome.reset();
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Up),
-                    ..
-                } => {
-                    metronome.adjust_bpm(0.1);
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Down),
-                    ..
-                } => {
-                    metronome.adjust_bpm(-0.1);
-                }
-                _ => {}
-            }
+    loop {
+        // Handle keyboard input
+        if is_key_pressed(KeyCode::Escape) || is_quit_requested() {
+            break;
         }
-        
+
+        if is_key_pressed(KeyCode::Space) {
+            metronome.reset();
+        }
+
+        if is_key_down(KeyCode::Up) {
+            metronome.adjust_bpm(0.1);
+        }
+
+        if is_key_down(KeyCode::Down) {
+            metronome.adjust_bpm(-0.1);
+        }
+
+        // Handle MIDI events
         let mut new_bpm: f32 = 0.0;
-        'korg_event: loop {
+        loop {
             match event_rx.try_recv() {
                 Ok(event) => match event {
                     korg_nano_kontrol_2::Event::VerticalSlider(
@@ -123,7 +96,7 @@ pub fn main() {
                     }
                     _ => {}
                 },
-                Err(_e) => break 'korg_event,
+                Err(_e) => break,
             }
         }
         metronome.set_bpm(new_bpm);
@@ -131,11 +104,29 @@ pub fn main() {
         let counter_copy = metronome.get_counter();
         let current_bpm = metronome.get_bpm();
 
-        render_frame(&mut canvas, &font, &visual_effects, counter_copy, current_bpm);
+        // Begin zoom feedback - switches to offscreen rendering
+        // All subsequent drawing will be captured for the zoom effect
+        zoom_feedback.begin_frame();
 
-        canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        // Render BPM text
+        draw_text(
+            &format!("BPM: {:.1}", current_bpm),
+            10.0,
+            30.0,
+            32.0,
+            WHITE
+        );
+
+        // Render all visual effects
+        visual_effects.draw_all(counter_copy);
+
+        // End zoom feedback - restores screen rendering and displays the result
+        zoom_feedback.end_frame();
+
+        next_frame().await;
     }
+
+    // Cleanup MIDI connections
     for input in inputs {
         input.close();
     }
@@ -146,7 +137,7 @@ fn setup_midi() -> (Vec<midir::MidiInputConnection<()>>, std::sync::mpsc::Receiv
     let (event_tx, event_rx) = std::sync::mpsc::channel();
     let mut inputs = Vec::new();
 
-    // For each point used by the nano kontrol 2, check for events.
+    // For each port used by the nano kontrol 2, check for events.
     for i in 0..midi_in.port_count() {
         let name = midi_in.port_name(i).unwrap();
         let event_tx = event_tx.clone();
@@ -165,27 +156,6 @@ fn setup_midi() -> (Vec<midir::MidiInputConnection<()>>, std::sync::mpsc::Receiv
             .unwrap();
         inputs.push(input);
     }
-    
+
     (inputs, event_rx)
-}
-
-fn render_frame(canvas: &mut Canvas<Window>, font: &sdl3::ttf::Font, visual_effects: &VisualEffectComposite, counter: f32, bpm: f32) {
-    canvas.set_draw_color(Color::RGB(0, 0, 0));
-    canvas.clear();
-
-    // Render BPM text
-    let surface = font
-        .render(&format!("BPM: {:.1}", bpm))
-        .blended(Color::RGB(255, 255, 255))
-        .unwrap();
-    let texture_creator = canvas.texture_creator();
-    let texture = texture_creator
-        .create_texture_from_surface(&surface)
-        .unwrap();
-    let TextureQuery { width, height, .. } = texture.query();
-    let target = Rect::new(10, 10, width, height);
-    canvas.copy(&texture, None, target).unwrap();
-
-    // Render all visual effects
-    visual_effects.draw_all(canvas, counter);
 }

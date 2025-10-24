@@ -1,6 +1,4 @@
-use sdl3::pixels::Color;
-use sdl3::render::Canvas;
-use sdl3::video::Window;
+use macroquad::prelude::*;
 use super::GenericVisualEffect;
 
 // Pulsing circle effect
@@ -25,17 +23,9 @@ impl PulsingCircle {
 }
 
 impl GenericVisualEffect for PulsingCircle {
-    fn draw(&self, canvas: &mut Canvas<Window>, counter: f32) {
-        canvas.set_draw_color(self.color);
+    fn draw(&self, counter: f32) {
         let radius = self.base_radius + (counter.fract() * self.pulse_amplitude);
-
-        // Draw a pulsing circle
-        for angle in 0..360 {
-            let rad = (angle as f32).to_radians();
-            let x = self.center_x + radius * rad.cos();
-            let y = self.center_y + radius * rad.sin();
-            canvas.draw_point((x as i32, y as i32)).unwrap();
-        }
+        draw_circle(self.center_x, self.center_y, radius, self.color);
     }
 
     fn name(&self) -> &str {
